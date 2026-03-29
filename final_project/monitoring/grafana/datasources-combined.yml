@@ -1,0 +1,17 @@
+apiVersion: 1
+
+datasources:
+  # Local Prometheus — scrapes AI agent + cart-api via ALB
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus-local:9090
+    isDefault: true
+    editable: true
+
+  # Remote Prometheus on ECS — for ECS-side metrics
+  - name: Prometheus-ECS
+    type: prometheus
+    access: proxy
+    url: http://cs6650-final-prom-nlb-a5ac2dc21f18fd85.elb.us-west-2.amazonaws.com:9090
+    editable: true

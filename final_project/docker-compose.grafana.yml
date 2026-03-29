@@ -1,0 +1,37 @@
+# Local Grafana + Prometheus for monitoring
+# Prometheus scrapes both:
+#   - Local AI agent (:8083)
+#   - Remote cart-api (ALB) + remote ECS Prometheus
+#
+# Usage: docker compose -f docker-compose.grafana.yml up -d
+
+services:
+  prometheus-local:
+    image: prom/prometheus:v2.54.0
+    container_name: prometheus-local
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./monitoring/prometheus/prometheus-local-agent.yml:/etc/prometheus/prometheus.yml:ro
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      AWS_SHARED_CREDENTIALS_FILE: /aws/credentials
+      AWS_CONFIG_FILE: /aws/config
+    volumes:
+      - ./monitoring/grafana/datasources-combined.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./monitoring/grafana/dashboard-provider.yml:/etc/grafana/provisioning/dashboards/provider.yml:ro
+      - ${HOME}/.aws:/aws:ro
+    depends_on:
+      - prometheus-local
+    restart: unless-stopped

@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+
+scrape_configs:
+  # Local AI agent
+  - job_name: "ai-agent"
+    static_configs:
+      - targets: ["host.docker.internal:8083"]
+
+  # Remote cart-api via ALB (update DNS after terraform apply)
+  - job_name: "cart-api"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["cs6650-final-alb-732441295.us-west-2.elb.amazonaws.com:80"]

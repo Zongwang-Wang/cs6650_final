@@ -1,0 +1,9 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://cs6650-final-prom-nlb-a5ac2dc21f18fd85.elb.us-west-2.amazonaws.com:9090
+    isDefault: true
+    editable: true
