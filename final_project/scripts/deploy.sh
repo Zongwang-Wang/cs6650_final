@@ -6,6 +6,7 @@ set -euo pipefail
 
 REGION="us-west-2"
 PROJECT="cs6650-final"
+IMAGE_PLATFORM="${IMAGE_PLATFORM:-linux/amd64}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 TF_DIR="$PROJECT_DIR/terraform"
@@ -43,19 +44,16 @@ if [ "$SKIP_BUILD" = false ]; then
   echo ">>> Step 2: Logging into ECR..."
   aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ECR_BASE"
 
-  declare -A SERVICES=(
-    ["cart-api"]="$ECR_BASE/$PROJECT/cart-api:latest"
-    ["analytics"]="$ECR_BASE/$PROJECT/analytics:latest"
-    ["alert"]="$ECR_BASE/$PROJECT/alert:latest"
-  )
+  SERVICES=("cart-api" "analytics" "alert")
 
-  for svc in "${!SERVICES[@]}"; do
+  for svc in "${SERVICES[@]}"; do
+    image="$ECR_BASE/$PROJECT/$svc:latest"
     echo ""
-    echo ">>> Building $svc..."
-    docker build -t "$svc" "$PROJECT_DIR/services/$svc"
-    docker tag "$svc" "${SERVICES[$svc]}"
+    echo ">>> Building $svc for platform $IMAGE_PLATFORM..."
+    docker build --platform "$IMAGE_PLATFORM" -t "$svc" "$PROJECT_DIR/services/$svc"
+    docker tag "$svc" "$image"
     echo ">>> Pushing $svc to ECR..."
-    docker push "${SERVICES[$svc]}"
+    docker push "$image"
   done
 else
   echo ">>> Skipping build (--skip-build)"
@@ -81,10 +79,20 @@ echo ""
 echo ">>> Step 4: Waiting for services to stabilize (this may take a few minutes)..."
 for svc in kafka cart-api analytics alert; do
   echo "  Waiting for $PROJECT-$svc..."
-  aws ecs wait services-stable \
+  if ! aws ecs wait services-stable \
     --cluster "$CLUSTER" \
     --services "$PROJECT-$svc" \
-    --region "$REGION" 2>/dev/null || echo "  Warning: $PROJECT-$svc may not be stable yet"
+    --region "$REGION" 2>/dev/null; then
+    reason=$(aws ecs describe-services \
+      --cluster "$CLUSTER" \
+      --services "$PROJECT-$svc" \
+      --region "$REGION" \
+      --no-cli-pager \
+      --query 'services[0].events[0].message' \
+      --output text 2>/dev/null || echo "unknown")
+    echo "  Warning: $PROJECT-$svc may not be stable yet"
+    echo "  Last ECS event: $reason"
+  fi
 done
 
 # ── Done ──
