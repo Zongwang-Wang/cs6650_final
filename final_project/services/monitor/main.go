@@ -20,7 +20,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 )
 
-// AggregatedMetric mirrors the analytics service output stored in DynamoDB.
+// AggregatedMetric mirrors the struct that analytics writes to DynamoDB.
+// The monitor reads these records to build the context it passes to Claude Code.
+// Note: the monitor does NOT consume Kafka directly — it uses DynamoDB as a
+// decoupled data store, which means it can run locally without joining the Kafka cluster.
 type AggregatedMetric struct {
 	Timestamp         string  `json:"timestamp" dynamodbav:"timestamp"`
 	WindowSeconds     int     `json:"window_seconds" dynamodbav:"window_seconds"`
@@ -149,7 +152,9 @@ func main() {
 	}
 }
 
-// pollDynamoDB gets the latest metric from DynamoDB, returns nil if no new data.
+// pollDynamoDB fetches the latest item from DynamoDB and returns it only if its
+// timestamp is newer than the last one we processed (deduplication via lastTimestamp).
+// This prevents re-triggering Claude Code on data we already acted on.
 func pollDynamoDB(ctx context.Context, client *dynamodb.Client, tableName string, state *MonitorState) *AggregatedMetric {
 	// Scan for latest items (sorted by timestamp descending)
 	out, err := client.Scan(ctx, &dynamodb.ScanInput{
@@ -183,6 +188,16 @@ func pollDynamoDB(ctx context.Context, client *dynamodb.Client, tableName string
 	return &metric
 }
 
+// evaluateAlerts applies scaling heuristics to the current metric snapshot and
+// recent history. It checks five conditions:
+//   1. HIGH_CPU_INCREASING  — CPU > 70% AND trend is "increasing" (proactive scale-up)
+//   2. SUSTAINED_HIGH_CPU   — CPU > 80% for 3 consecutive 10s windows (reactive scale-up)
+//   3. SUSTAINED_LOW_CPU    — CPU < 30% for 3 consecutive 10s windows (scale-down)
+//   4. HIGH_ERROR_RATE      — 5xx error rate > 5%
+//   5. HIGH_LATENCY         — p99 latency > 500ms
+//
+// Returns all triggered conditions. The caller invokes Claude Code only when at
+// least one condition is triggered and the cooldown period has elapsed.
 func evaluateAlerts(current AggregatedMetric, history []AggregatedMetric) []AlertCondition {
 	var alerts []AlertCondition
 
@@ -240,6 +255,16 @@ func evaluateAlerts(current AggregatedMetric, history []AggregatedMetric) []Aler
 	return alerts
 }
 
+// buildClaudePrompt constructs a structured natural-language prompt that is passed
+// to the Claude Code CLI. The prompt includes:
+//   - Which alert conditions were triggered (and their current values)
+//   - The latest AggregatedMetric snapshot
+//   - The last N metric windows as JSON history for trend context
+//   - Step-by-step instructions telling Claude how to query AWS, interpret the data,
+//     and run terraform apply if scaling is warranted
+//
+// This is the "glue" between the metrics pipeline and the AI decision engine.
+// Claude Code is given full AWS CLI and Terraform access to act autonomously.
 func buildClaudePrompt(alerts []AlertCondition, current AggregatedMetric, history []AggregatedMetric, terraformDir string) string {
 	alertLines := make([]string, len(alerts))
 	for i, a := range alerts {
@@ -295,6 +320,16 @@ IMPORTANT: Be conservative. Only scale if the data clearly supports it. Explain 
 	)
 }
 
+// invokeClaudeCode shells out to the `claude` CLI with the constructed prompt.
+// --print:                       run non-interactively, print output then exit
+// --dangerously-skip-permissions: allow Claude Code to execute shell commands
+//                                 (aws, terraform) without per-command prompts
+//
+// Claude Code receives the full prompt as its task and autonomously:
+//  1. Queries AWS ECS and CloudWatch to verify the alert
+//  2. Decides whether to scale up, scale down, or take no action
+//  3. Edits terraform.tfvars and runs terraform apply if scaling is needed
+//  4. Reports its decision in plain text to stdout
 func invokeClaudeCode(prompt string) {
 	cmd := exec.Command("claude",
 		"--print",

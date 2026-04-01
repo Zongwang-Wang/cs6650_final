@@ -4,19 +4,33 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"net/http"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 )
 
-// burnCPU simulates realistic per-request CPU work.
-// ~100 iterations ≈ 0.5ms CPU per request.
-// At 200 req/s on 0.25 vCPU, this pushes CPU to ~40%.
-// At 500 req/s, it hits ~80-100%.
+// cpuBurnIterations controls per-request CPU work. Tune via CPU_BURN_ITERATIONS.
+//
+// Reference (0.25 vCPU / 256 CPU units):
+//   100  iters ≈ 0.5ms → ~40% CPU at 200 req/s  (original)
+//   500  iters ≈ 2.5ms → ~50% CPU at  50 req/s
+//   1000 iters ≈ 5ms   → ~80% CPU at  40 req/s
+var cpuBurnIterations = func() int {
+	if v := os.Getenv("CPU_BURN_ITERATIONS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 500 // default: observable CPU at ~50 req/s on 0.25 vCPU
+}()
+
+// burnCPU simulates per-request CPU work via repeated SHA256 hashing.
 func burnCPU() {
 	data := []byte("simulate-cpu-intensive-work")
-	for i := 0; i < 100; i++ {
+	for i := 0; i < cpuBurnIterations; i++ {
 		data = sha256.New().Sum(data)
 	}
 }

@@ -23,6 +23,21 @@ func main() {
 	metrics := NewMetrics()
 	producer.SetMetrics(metrics)
 
+	// Sync cpuTracker → Prometheus gauges every 5 seconds.
+	// CPU and memory are both read from the same cpuTracker sample to keep them
+	// time-consistent. go_goroutines is exported automatically by the Prometheus
+	// Go collector (no manual sync needed).
+	go func() {
+		t := time.NewTicker(5 * time.Second)
+		defer t.Stop()
+		for range t.C {
+			metrics.CPUPercent.Set(cpuTracker.get())
+			if mem := cpuTracker.getMemoryBytes(); mem > 0 {
+				metrics.MemoryBytes.Set(float64(mem))
+			}
+		}
+	}()
+
 	mux := http.NewServeMux()
 	handler := NewHandler(producer, metrics)
 	mux.HandleFunc("POST /cart/items", handler.AddItem)

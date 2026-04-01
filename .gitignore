@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+
+# Go binaries (compiled service executables)
+final_project/services/cart-api/cart-api
+final_project/services/analytics/analytics
+final_project/services/alert/alert
+final_project/services/ai-agent/ai-agent
+final_project/services/monitor/monitor
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Locust results
+final_project/loadtest/results/
+
+# Terraform state & cache
+final_project/terraform/terraform.tfstate
+final_project/terraform/terraform.tfstate.backup
+final_project/terraform/.terraform/
+final_project/terraform/.terraform.lock.hcl
+
+# Claude code and data
+.claude

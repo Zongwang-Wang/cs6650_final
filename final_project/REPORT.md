@@ -48,40 +48,40 @@ All five microservices have been built, containerized, and deployed to AWS ECS F
                           AWS ECS Fargate Cluster
     ┌──────────────────────────────────────────────────────────────────────┐
     │                                                                      │
-    │  ┌─────────┐    ┌───────────────────────────────────────────┐       │
-    │  │  ALB    │    │     Kafka (KRaft, single broker on ECS)   │       │
-    │  │ :80     │    │                                           │       │
-    │  └────┬────┘    │  metrics-topic (6 partitions)             │       │
-    │       │         │  analytics-output-topic (3 partitions)    │       │
-    │       ▼         │  infra-events-topic (1 partition)         │       │
-    │  ┌──────────┐   └──────┬──────────────────┬─────────────────┘       │
-    │  │ cart-api  │──publish──┘                  │                        │
-    │  │ (2-8     │          ┌──────────consume───┤                        │
-    │  │  tasks)  │          │                    │                        │
-    │  │ :8080    │          ▼                    ▼                        │
-    │  └──────────┘   ┌────────────┐      ┌────────────┐                  │
-    │                 │ analytics  │      │   alert    │                  │
-    │                 │ (1 task)   │      │ (1 task)   │                  │
-    │                 │ :8081      │      │ :8082      │                  │
-    │                 └──────┬─────┘      └──────┬─────┘                  │
+    │  ┌─────────┐    ┌───────────────────────────────────────────┐        │
+    │  │  ALB    │    │     Kafka (KRaft, single broker on ECS)   │        │
+    │  │ :80     │    │                                           │        │
+    │  └────┬────┘    │  metrics-topic (6 partitions)             │        │
+    │       │         │  analytics-output-topic (3 partitions)    │        │
+    │       ▼         │  infra-events-topic (1 partition)         │        │
+    │  ┌──────────┐   └───────┬──────────────────┬────────────────┘        │
+    │  │ cart-api │──publish──┘                  │                         │
+    │  │ (2-8     │          ┌─────────consume───┤                         │
+    │  │  tasks)  │          │                   │                         │
+    │  │ :8080    │          ▼                   ▼                         │
+    │  └──────────┘   ┌────────────┐      ┌────────────┐                   │
+    │                 │ analytics  │      │   alert    │                   │
+    │                 │ (1 task)   │      │ (1 task)   │                   │
+    │                 │ :8081      │      │ :8082      │                   │
+    │                 └──────┬─────┘      └──────┬─────┘                   │
     │                        │                    │                        │
     │              publish   │                    │  SNS email             │
     │              to Kafka  │                    ▼                        │
-    │                        │            ┌────────────┐                  │
-    │                        │            │    SNS     │                  │
-    │                        │            │  (alerts)  │                  │
-    │                        ▼            └────────────┘                  │
+    │                        │            ┌────────────┐                   │
+    │                        │            │    SNS     │                   │
+    │                        │            │  (alerts)  │                   │
+    │                        ▼            └────────────┘                   │
     │                 ┌────────────┐                                       │
-    │                 │  ai-agent  │  (ECS deployment)                    │
-    │                 │  (1 task)  │────terraform apply──► ECS scaling    │
+    │                 │  ai-agent  │  (ECS deployment)                     │
+    │                 │  (1 task)  │────terraform apply──► ECS scaling     │
     │                 │  :8083     │                                       │
     │                 └────────────┘                                       │
     │                                                                      │
-    │  ┌──────────────┐     ┌──────────────────┐                          │
-    │  │  Prometheus  │     │    DynamoDB       │                          │
+    │  ┌──────────────┐     ┌──────────────────┐                           │
+    │  │  Prometheus  │     │    DynamoDB      │                           │
     │  │  (1 task)    │     │ cs6650-final-     │                          │
-    │  │  :9090       │     │   metrics         │                          │
-    │  └──────┬───────┘     └──────────────────┘                          │
+    │  │  :9090       │     │   metrics        │                           │
+    │  └──────┬───────┘     └──────────────────┘                           │
     │         │ NLB (public)                                               │
     └─────────┼────────────────────────────────────────────────────────────┘
               │

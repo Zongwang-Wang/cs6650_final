@@ -10,9 +10,11 @@ import (
 )
 
 type Metrics struct {
-	RequestTotal    *prometheus.CounterVec
-	RequestDuration *prometheus.HistogramVec
+	RequestTotal      *prometheus.CounterVec
+	RequestDuration   *prometheus.HistogramVec
 	KafkaPublishTotal *prometheus.CounterVec
+	CPUPercent        prometheus.Gauge
+	MemoryBytes       prometheus.Gauge // container RSS bytes from ECS Task Metadata (0 on non-ECS)
 }
 
 func NewMetrics() *Metrics {
@@ -39,11 +41,25 @@ func NewMetrics() *Metrics {
 			},
 			[]string{"result"},
 		),
+		CPUPercent: prometheus.NewGauge(
+			prometheus.GaugeOpts{
+				Name: "cart_api_cpu_percent",
+				Help: "Current CPU usage as percentage of allocated vCPU",
+			},
+		),
+		MemoryBytes: prometheus.NewGauge(
+			prometheus.GaugeOpts{
+				Name: "cart_api_memory_bytes",
+				Help: "Container RSS memory usage in bytes (from ECS Task Metadata; 0 on non-ECS)",
+			},
+		),
 	}
 
 	prometheus.MustRegister(m.RequestTotal)
 	prometheus.MustRegister(m.RequestDuration)
 	prometheus.MustRegister(m.KafkaPublishTotal)
+	prometheus.MustRegister(m.CPUPercent)
+	prometheus.MustRegister(m.MemoryBytes)
 
 	return m
 }

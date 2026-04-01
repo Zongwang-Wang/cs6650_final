@@ -12,4 +12,4 @@ scrape_configs:
   - job_name: "cart-api"
     metrics_path: /metrics
     static_configs:
-      - targets: ["cs6650-final-alb-732441295.us-west-2.elb.amazonaws.com:80"]
+      - targets: ["cs6650-final-alb-1345652791.us-west-2.elb.amazonaws.com:80"]
