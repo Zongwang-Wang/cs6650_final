@@ -44,63 +44,90 @@ All five microservices have been built, containerized, and deployed to AWS ECS F
 
 ### Architecture Diagram
 
-```
-                          AWS ECS Fargate Cluster
-    ┌──────────────────────────────────────────────────────────────────────┐
-    │                                                                      │
-    │  ┌─────────┐    ┌───────────────────────────────────────────┐        │
-    │  │  ALB    │    │     Kafka (KRaft, single broker on ECS)   │        │
-    │  │ :80     │    │                                           │        │
-    │  └────┬────┘    │  metrics-topic (6 partitions)             │        │
-    │       │         │  analytics-output-topic (3 partitions)    │        │
-    │       ▼         │  infra-events-topic (1 partition)         │        │
-    │  ┌──────────┐   └───────┬──────────────────┬────────────────┘        │
-    │  │ cart-api │──publish──┘                  │                         │
-    │  │ (2-8     │          ┌─────────consume───┤                         │
-    │  │  tasks)  │          │                   │                         │
-    │  │ :8080    │          ▼                   ▼                         │
-    │  └──────────┘   ┌────────────┐      ┌────────────┐                   │
-    │                 │ analytics  │      │   alert    │                   │
-    │                 │ (1 task)   │      │ (1 task)   │                   │
-    │                 │ :8081      │      │ :8082      │                   │
-    │                 └──────┬─────┘      └──────┬─────┘                   │
-    │                        │                    │                        │
-    │              publish   │                    │  SNS email             │
-    │              to Kafka  │                    ▼                        │
-    │                        │            ┌────────────┐                   │
-    │                        │            │    SNS     │                   │
-    │                        │            │  (alerts)  │                   │
-    │                        ▼            └────────────┘                   │
-    │                 ┌────────────┐                                       │
-    │                 │  ai-agent  │  (ECS deployment)                     │
-    │                 │  (1 task)  │────terraform apply──► ECS scaling     │
-    │                 │  :8083     │                                       │
-    │                 └────────────┘                                       │
-    │                                                                      │
-    │  ┌──────────────┐     ┌──────────────────┐                           │
-    │  │  Prometheus  │     │    DynamoDB      │                           │
-    │  │  (1 task)    │     │ cs6650-final-     │                          │
-    │  │  :9090       │     │   metrics        │                           │
-    │  └──────┬───────┘     └──────────────────┘                           │
-    │         │ NLB (public)                                               │
-    └─────────┼────────────────────────────────────────────────────────────┘
-              │
-              ▼
-    ┌──────────────────┐        ┌──────────────────────┐
-    │  Grafana (:3000) │◄───────│ Local Prometheus      │
-    │  (local)         │        │ (scrapes ALB +        │
-    └──────────────────┘        │  remote Prometheus)   │
-                                └──────────────────────┘
+```mermaid
+flowchart TD
+    %% ── External clients ──────────────────────────────────────────
+    Locust["Locust\n(load generator)"]
+    Monitor["Monitor\n(local Go binary)"]
+    Grafana["Grafana :3000\n(local)"]
 
-    ┌──────────────────┐
-    │  Locust          │──── HTTP POST /cart/items ────► ALB
-    │  (load tester)   │
-    └──────────────────┘
+    %% ── AWS boundary ──────────────────────────────────────────────
+    subgraph AWS["AWS ECS Fargate Cluster (us-west-2)"]
 
-    ┌──────────────────┐        (Alternative AI agent approach)
-    │  Monitor (local) │──polls DynamoDB──► detects alerts
-    │  Go binary       │──spawns Claude Code CLI──► terraform apply
-    └──────────────────┘
+        subgraph LB["Load Balancers"]
+            ALB["ALB :80\n(public)"]
+            KafkaNLB["NLB (internal)\nKafka :9092"]
+            PromNLB["NLB :9090\n(public)"]
+        end
+
+        subgraph Services["ECS Services"]
+            CartAPI["cart-api\n1–8 tasks · :8080\n256 CPU / 512 MB"]
+            Analytics["analytics\n1 task · :8081\n256 CPU / 512 MB"]
+            Alert["alert\n1 task · :8082\n256 CPU / 512 MB"]
+            AIAgent["ai-agent\n1 task · :8083\n256 CPU / 512 MB"]
+            Prom["🔭 Prometheus\n1 task · :9090\n512 CPU / 1024 MB"]
+        end
+
+        subgraph Kafka["Kafka (KRaft, 1 broker)"]
+            MT["metrics-topic\n6 partitions"]
+            AOT["analytics-output-topic\n3 partitions"]
+            IET["infra-events-topic\n1 partition"]
+        end
+
+        subgraph Storage["Managed Services"]
+            DDB["DynamoDB\ncs6650-final-metrics"]
+            SNS["SNS\n(email alerts)"]
+        end
+
+        AutoScale["⚖️ Auto Scaling\nCPU target 70%\nmin 1 · max 8"]
+    end
+
+    LocalProm["Local Prometheus\n(scrapes ALB + remote Prom)"]
+    Terraform["Terraform\n(ECS desired count)"]
+
+    %% ── Traffic flow ──────────────────────────────────────────────
+    Locust -->|"POST /cart/items"| ALB
+    ALB -->|"round-robin"| CartAPI
+
+    CartAPI -->|"publish MetricEvent\n(latency, CPU%, status)"| MT
+    MT -->|"consume"| Analytics
+    MT -->|"consume"| Alert
+
+    Analytics -->|"publish AggregatedMetric\n(avg CPU, p99, trend)"| AOT
+    Analytics -->|"write"| DDB
+    AOT -->|"consume"| AIAgent
+
+    Alert -->|"threshold breach"| SNS
+
+    AIAgent -->|"ScalingDecision →\nterraform apply"| Terraform
+    Terraform -->|"set desired count"| AutoScale
+    AutoScale -.->|"scale out / in"| CartAPI
+
+    %% ── Monitoring flow ───────────────────────────────────────────
+    CartAPI -->|"GET /metrics"| Prom
+    PromNLB --- Prom
+    KafkaNLB --- Kafka
+
+    Prom -->|"remote read"| LocalProm
+    LocalProm -->|"ALB scrape"| CartAPI
+    LocalProm --> Grafana
+
+    %% ── Local monitor (alternative AI approach) ───────────────────
+    Monitor -->|"poll"| DDB
+    Monitor -->|"spawn Claude Code CLI\nterraform apply"| Terraform
+
+    %% ── Styles ────────────────────────────────────────────────────
+    classDef aws fill:#FF9900,color:#000,stroke:#c77700
+    classDef kafka fill:#231F20,color:#fff,stroke:#555
+    classDef local fill:#0066cc,color:#fff,stroke:#004499
+    classDef storage fill:#3F48CC,color:#fff,stroke:#2233aa
+    classDef scale fill:#27AE60,color:#fff,stroke:#1a7a42
+
+    class CartAPI,Analytics,Alert,AIAgent,Prom aws
+    class MT,AOT,IET kafka
+    class Grafana,LocalProm,Monitor,Locust local
+    class DDB,SNS storage
+    class AutoScale,Terraform scale
 ```
 
 ### Data Flow
@@ -249,7 +276,11 @@ Claude Code CLI was preferred as the primary AI agent approach because it **requ
 
 - **CPU simulation via `burnCPU()`**: Each request performs 100 iterations of SHA-256 hashing, consuming approximately 0.5ms of CPU time per request. At 200 req/s on a 0.25 vCPU Fargate task, this produces ~40% CPU utilization. At 500 req/s, it hits 80-100%. This creates a realistic relationship between load and CPU usage that the AI agent can reason about.
 
-- **Real CPU measurement via `syscall.Getrusage`**: The `cpuTracker` background goroutine samples actual process CPU time every 5 seconds using the `Getrusage` syscall, computing CPU utilization as a percentage of the allocated 0.25 vCPU. This replaced an earlier approach that used goroutine count as a heuristic (which always reported ~100% and was useless).
+- **Multi-source CPU and memory measurement via `cpuTracker`**: A background goroutine samples container-level CPU every 5 seconds. The measurement source is selected at startup in priority order:
+  1. **ECS Task Metadata Endpoint v4** (`$ECS_CONTAINER_METADATA_URI_V4/stats`): container-level CPU using the same formula as CloudWatch ECS CPUUtilization, plus container memory RSS. Available inside Fargate tasks only.
+  2. **cgroup** (`/sys/fs/cgroup/cpu.stat` for v2, `/sys/fs/cgroup/cpuacct/cpuacct.usage` for v1): container-level CPU on Linux; also reads `/sys/fs/cgroup/memory.current` for memory. Used on ECS when the metadata endpoint is unavailable.
+  3. **`syscall.Getrusage`**: Go process-level CPU only. macOS / local dev fallback.
+  This replaced an earlier approach that used goroutine count as a heuristic (which always reported ~100% and was useless).
 
 - **Async Kafka publishing** (`go h.producer.PublishMetric(...)` in handler): The metric publish runs in a background goroutine so it does not add Kafka latency to the HTTP response path. The `kafka.Writer` is configured with `BatchTimeout: 10ms` and `RequiredAcks: RequireOne` for a balance between throughput and reliability.
 
@@ -269,6 +300,7 @@ Claude Code CLI was preferred as the primary AI agent approach because it **requ
 ```
 
 **Failure Handling:**
+
 - Kafka publish failures are logged and counted via `KafkaPublishTotal` with a `"failure"` label, but do not fail the HTTP request. The system degrades gracefully: if Kafka is down, HTTP requests succeed but metrics are lost.
 - Graceful shutdown via `signal.Notify(SIGINT, SIGTERM)` with a 5-second context timeout ensures in-flight requests complete and the Kafka writer flushes before exit.
 
@@ -279,6 +311,8 @@ Claude Code CLI was preferred as the primary AI agent approach because it **requ
 | `cart_api_http_requests_total` | Counter | method, endpoint, status | Request volume and error rate |
 | `cart_api_http_request_duration_seconds` | Histogram | method, endpoint, status | Latency percentiles (p50, p95, p99) |
 | `cart_api_kafka_publish_total` | Counter | result (success/failure) | Kafka reliability tracking |
+| `cart_api_cpu_percent` | Gauge | — | CPU % of allocated vCPU (synced from cpuTracker every 5s) |
+| `cart_api_memory_bytes` | Gauge | — | Container RSS in bytes (ECS Metadata or cgroup; 0 on macOS) |
 
 ### 4.2 Analytics Service (`services/analytics/`)
 
@@ -321,6 +355,7 @@ Claude Code CLI was preferred as the primary AI agent approach because it **requ
 ```
 
 **Failure Handling:**
+
 - DynamoDB write failures are logged but do not block the Kafka publish or the aggregation loop. If DynamoDB is unavailable, the Kafka pipeline continues unaffected.
 - The DynamoDB writer is initialized with a nil check; if the `DYNAMODB_TABLE` environment variable is empty (local development), DynamoDB persistence is silently disabled.
 
@@ -353,6 +388,7 @@ Claude Code CLI was preferred as the primary AI agent approach because it **requ
 - **Dual notification (stdout + SNS)**: Every alert is logged as structured JSON to stdout (captured by CloudWatch Logs) regardless of SNS configuration. If the `SNS_TOPIC_ARN` environment variable is set, the alert is also published to SNS. This ensures alerts are always observable even if SNS is misconfigured.
 
 **Failure Handling:**
+
 - SNS publish failures are logged but do not crash the service. The alert is still recorded in stdout/CloudWatch.
 - If AWS config cannot be loaded, SNS is disabled with a warning log, and the service continues with stdout-only alerting.
 
@@ -381,6 +417,7 @@ Claude Code CLI was preferred as the primary AI agent approach because it **requ
 - **Terraform integration via `terraform.tfvars` editing**: The agent uses regex replacement to update `ai_desired_count` and `scaling_mode` in the tfvars file, then shells out to `terraform plan` followed by `terraform apply -auto-approve`. This approach is auditable (git diff shows exactly what changed) and reversible.
 
 **Failure Handling:**
+
 - Claude API errors (timeout, rate limit, invalid response) are logged but do not crash the agent. The metric is effectively skipped, and the next aggregation window will trigger a new decision attempt.
 - Terraform apply failures are logged and counted via `MetricsTerraformApplies` with a `"failure"` label. The agent does not retry automatically -- it waits for the next aggregation window.
 - Invalid Claude responses (malformed JSON, out-of-bounds task counts, invalid actions) are caught by `validateDecision()` and rejected.
@@ -547,13 +584,14 @@ scrape_configs:
 
 | Panel | Metric / Query | Purpose |
 |-------|---------------|---------|
-| CPU Usage | `rate(process_cpu_seconds_total[1m]) / 2 * 100` | Per-task CPU as % of available host CPUs |
-| Memory RSS | `process_resident_memory_bytes` | Memory pressure detection |
+| CPU Usage | `cart_api_cpu_percent`, `analytics_avg_cpu_percent` | Container CPU % (cpuTracker) and analytics 60s avg |
+| Memory RSS | `cart_api_memory_bytes` | Container RSS bytes (ECS Metadata / cgroup) |
 | HTTP Request Rate | `rate(cart_api_http_requests_total[1m])` | Throughput monitoring |
 | Latency Percentiles | `histogram_quantile(0.5/0.95/0.99, rate(cart_api_http_request_duration_seconds_bucket[1m]))` | Tail latency detection |
-| Goroutines | `go_goroutines` | Concurrency / leak detection |
-| Kafka Publish Rate | `rate(cart_api_kafka_publish_total{result="success"}[1m])` | Pipeline health |
-| Error Rate | `rate(cart_api_kafka_publish_total{result="failure"}[1m])` | Kafka connectivity |
+| Goroutines | `go_goroutines{job="cart-api"}` | Concurrency / goroutine leak detection |
+| Kafka Publish Rate | `rate(cart_api_kafka_publish_total[1m])` | Kafka publish success/failure rate |
+| HTTP Error Rate | `sum(rate(cart_api_http_requests_total{status=~"4\|5.."}[1m])) / sum(rate(...[1m])) * 100` | Request error % |
+| Prometheus Targets | `up` | Health of all scrape targets |
 
 **AI Agent Audit Dashboard** (planned):
 
@@ -572,34 +610,40 @@ Accurately measuring CPU utilization in a Fargate container was one of the most 
 **Version 1 -- Goroutine heuristic (FAILED):**
 The initial approach estimated CPU usage based on the number of active goroutines. This always reported ~100% because Go's runtime scheduler maintains a pool of goroutines for network polling, garbage collection, and other background tasks -- even an idle Go process shows 5-10 goroutines.
 
-**Version 2 -- `syscall.Getrusage` (WORKING):**
-The final approach uses the Linux `getrusage(RUSAGE_SELF)` syscall to read actual process CPU time (user + system). A background goroutine samples every 5 seconds:
+**Version 2 -- `syscall.Getrusage` (working, but process-scope only):**
+Uses `getrusage(RUSAGE_SELF)` to read Go process CPU time. Accurate on macOS / local dev. On ECS, it measures only the Go process, missing CPU consumed by the Fargate networking sidecar and other containers in the task.
+
+**Version 3 -- cgroup + ECS Task Metadata Endpoint v4 (current, container-scope):**
+The `cpuTracker` selects the highest-accuracy source available at startup:
 
 ```go
-func (ct *cpuTrackerState) sample() {
-    var usage syscall.Rusage
-    syscall.Getrusage(syscall.RUSAGE_SELF, &usage)
-    cpuTime := tvToDuration(usage.Utime) + tvToDuration(usage.Stime)
-    cpuDelta := (cpuTime - ct.lastCPU).Seconds()
-    elapsed := now.Sub(ct.lastTime).Seconds()
-    // CPU as % of allocated vCPU (0.25 cores for 256 CPU units)
-    ct.currentPct = (cpuDelta / elapsed / ct.allocatedCPU) * 100.0
+// Priority 1: ECS Task Metadata Endpoint v4 — container-level, same formula as CloudWatch
+if stats, ok := ReadECSTaskStats(allocatedCPU); ok {
+    ct.useECSMetadata = true  // also provides memory RSS
 }
+// Priority 2: cgroup — container-level CPU on Linux
+else if nanos, ok := readCgroupCPUNanos(); ok {
+    ct.useCgroup = true       // also reads /sys/fs/cgroup/memory.current
+}
+// Priority 3: Getrusage — Go process-level, macOS / local dev fallback
+```
+
+The ECS Metadata formula matches CloudWatch exactly:
+
+```
+cpu% = (container_cpu_delta / system_cpu_delta) * online_cpus / allocated_cores * 100
 ```
 
 **Key calibration parameter: `allocatedCPU = 0.25`**
 
-ECS Fargate allocates CPU in "CPU units" where 1024 units = 1 vCPU. Our cart-api tasks use 256 CPU units = 0.25 vCPU. The `cpuDelta / elapsed` calculation gives CPU cores consumed (e.g., 0.20 cores). Dividing by `allocatedCPU` (0.25) converts this to **percentage of allocated capacity** (80%), which is the semantically meaningful number for scaling decisions.
+ECS Fargate allocates CPU in "CPU units" where 1024 units = 1 vCPU. Our cart-api tasks use 256 CPU units = 0.25 vCPU. Dividing measured CPU consumption by `allocatedCPU` (0.25) converts cores used into **percentage of allocated capacity**, matching the semantics of CloudWatch's `ECSServiceAverageCPUUtilization`.
 
-**Grafana PromQL for CPU:**
+**Grafana metrics for CPU:**
 
-```
-rate(process_cpu_seconds_total[1m]) / 2 * 100
-```
+- `cart_api_cpu_percent` — gauge updated every 5s by the `cpuTracker` goroutine. Reflects cgroup or ECS Metadata measurement on ECS.
+- `analytics_avg_cpu_percent` — time-weighted 60s rolling average published by the analytics service, used by the AI agent for scaling decisions.
 
-The `/ 2` divisor accounts for Fargate's host having 2 available CPU cores. The `process_cpu_seconds_total` metric (exported by the Go Prometheus client library) reports total CPU seconds consumed. The `rate()` function computes cores used, and `/ 2 * 100` converts to percentage of available host CPUs.
-
-**Fargate CPU burst behavior:** Fargate tasks can temporarily use more CPU than allocated. A 256-unit task (0.25 vCPU) can burst to 2 full cores if the host has spare capacity. This means the `Getrusage`-based metric can report >100% during bursts, which we cap at 100% in the code. The Grafana `process_cpu_seconds_total` metric can also show values above expected due to bursting.
+**Fargate CPU burst behavior:** Fargate tasks can temporarily use more CPU than allocated. A 256-unit task (0.25 vCPU) can burst to 2 full cores if the host has spare capacity. This means the metric can briefly exceed 100%; it is capped at 100% in code.
 
 ---
 
