@@ -1,0 +1,26 @@
+{
+  "team": [
+    {
+      "name": "Zongwang Wang",
+      "email": "wang.zongw@northeastern.edu"
+    },
+    {
+      "name": "Chen Zhuge",
+      "email": "zhuge.c@northeastern.edu"
+    },
+    {
+      "name": "Deng Pan",
+      "email": "pan.deng2@northeastern.edu"
+    },
+    {
+      "name": "Shiyue Guo",
+      "email": "guo.shiyue@northeastern.edu"
+    }
+  ],
+  "thresholds": {
+    "cpu_alert_pct": 10,
+    "latency_p99_ms": 500,
+    "error_rate_pct": 5,
+    "cache_hit_min_pct": 50
+  }
+}
