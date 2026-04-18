@@ -976,7 +976,7 @@
         {
           "datasource": "Prometheus",
           "expr": "aws_ec2_cpuutilization_average",
-          "legendFormat": "{{dimension_InstanceId}}"
+          "legendFormat": "{{tag_Name}}"
         }
       ]
     },
@@ -1011,13 +1011,13 @@
       "targets": [
         {
           "datasource": "Prometheus",
-          "expr": "rate(aws_ec2_network_in_sum[1m])",
-          "legendFormat": "NetworkIn ({{dimension_InstanceId}})"
+          "expr": "aws_ec2_network_in_sum / 60",
+          "legendFormat": "In ({{tag_Name}})"
         },
         {
           "datasource": "Prometheus",
-          "expr": "rate(aws_ec2_network_out_sum[1m])",
-          "legendFormat": "NetworkOut ({{dimension_InstanceId}})"
+          "expr": "aws_ec2_network_out_sum / 60",
+          "legendFormat": "Out ({{tag_Name}})"
         }
       ]
     },

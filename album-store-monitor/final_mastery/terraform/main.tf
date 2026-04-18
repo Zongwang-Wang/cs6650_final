@@ -252,6 +252,7 @@ resource "aws_instance" "nodes" {
 
   vpc_security_group_ids = [aws_security_group.album_store.id]
   iam_instance_profile   = "LabInstanceProfile"
+  monitoring             = true
 
   user_data = base64encode(local.user_data)
 
