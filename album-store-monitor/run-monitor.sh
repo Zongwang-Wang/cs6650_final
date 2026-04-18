@@ -17,7 +17,7 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MONITOR_BIN="$SCRIPT_DIR/services/monitor/monitor"
-TERRAFORM_DIR="$SCRIPT_DIR/../../../final_mastery/terraform"
+TERRAFORM_DIR="$SCRIPT_DIR/final_mastery/terraform"
 
 # Build if binary doesn't exist or is stale
 if [ ! -f "$MONITOR_BIN" ] || [ "$SCRIPT_DIR/services/monitor/main.go" -nt "$MONITOR_BIN" ]; then

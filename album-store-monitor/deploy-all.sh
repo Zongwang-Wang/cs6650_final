@@ -19,7 +19,7 @@
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TF_DIR="$SCRIPT_DIR/../../../final_mastery/terraform"
+TF_DIR="$SCRIPT_DIR/final_mastery/terraform"
 SERVER_DIR="$SCRIPT_DIR/server"
 REGION="${AWS_REGION:-us-west-2}"
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
