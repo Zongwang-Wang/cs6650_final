@@ -1,0 +1,1318 @@
+{
+  "title": "Album Store \u2014 ChaosArena Monitor",
+  "uid": "album-store-overview",
+  "version": 1,
+  "schemaVersion": 38,
+  "refresh": "15s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "tags": [
+    "album-store",
+    "chaosarena"
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "HTTP \u2014 ALB (ChaosArena traffic)",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Request Rate (req/s)",
+      "description": "Total HTTP requests per second through the ALB",
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 500
+              },
+              {
+                "color": "red",
+                "value": 1000
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "aws_applicationelb_request_count_sum / 60",
+          "legendFormat": "req/s"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "5xx Error Rate (%)",
+      "description": "Server errors \u2014 these count against ChaosArena load score (>10% = 0 pts)",
+      "gridPos": {
+        "x": 4,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "100 * rate(aws_applicationelb_httpcode_target_5_xx_count_sum[1m]) / (aws_applicationelb_request_count_sum / 60 + 0.001)",
+          "legendFormat": "5xx %"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "gauge",
+      "title": "P95 Latency (ms)",
+      "description": "ALB target response time p95 \u2014 directly drives ChaosArena load score",
+      "gridPos": {
+        "x": 8,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "max": 15000,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2000
+              },
+              {
+                "color": "orange",
+                "value": 5000
+              },
+              {
+                "color": "red",
+                "value": 10000
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "aws_applicationelb_target_response_time_p95 * 1000",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Healthy Nodes",
+      "description": "Number of c5n.large nodes passing ALB health checks",
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 3,
+        "h": 4
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "green",
+                "value": 4
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "min(aws_applicationelb_healthy_host_count_average)",
+          "legendFormat": "healthy"
+        }
+      ]
+    },
+    {
+      "id": 99,
+      "type": "text",
+      "title": "Claude Code DevOps Assistant",
+      "description": "Ask questions about the infrastructure. Click 'Generate Claude Code Prompt' then paste into your Claude Code session.",
+      "gridPos": {
+        "x": 15,
+        "y": 1,
+        "w": 9,
+        "h": 10
+      },
+      "options": {
+        "mode": "html",
+        "content": "<iframe src=\"http://35.84.142.111:8089\" style=\"width:100%;height:240px;border:none;border-radius:4px;background:#1a1a2e;\" title=\"DevOps Assistant\"></iframe>"
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Request Rate & Latency over time",
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 7
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "P50 latency (ms)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "P95 latency (ms)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "P99 latency (ms)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "aws_applicationelb_request_count_sum / 60",
+          "legendFormat": "Requests/s"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "aws_applicationelb_target_response_time_p50 * 1000",
+          "legendFormat": "P50 latency (ms)"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "aws_applicationelb_target_response_time_p95 * 1000",
+          "legendFormat": "P95 latency (ms)"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "aws_applicationelb_target_response_time_p99 * 1000",
+          "legendFormat": "P99 latency (ms)"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Redis \u2014 ElastiCache (seq counters + read cache)",
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "id": 11,
+      "type": "gauge",
+      "title": "Cache Hit Rate (%)",
+      "description": "redis_keyspace_hits / (hits + misses). High rate = album/photo status served from Redis without DB roundtrip. Cold cache after restart will show low rate initially.",
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 5,
+        "h": 5
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "green",
+                "value": 80
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "100 * rate(redis_keyspace_hits_total[1m]) / (rate(redis_keyspace_hits_total[1m]) + rate(redis_keyspace_misses_total[1m]) + 0.001)",
+          "legendFormat": "Hit rate"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Cache Hits vs Misses (rate/s)",
+      "description": "Hits = album/photo served from Redis. Misses = fell through to RDS. Redis is non-critical: misses degrade performance but do not cause errors.",
+      "gridPos": {
+        "x": 5,
+        "y": 13,
+        "w": 10,
+        "h": 5
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Misses"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Hits"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "rate(redis_keyspace_hits_total[1m])",
+          "legendFormat": "Hits"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "rate(redis_keyspace_misses_total[1m])",
+          "legendFormat": "Misses"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Seq INCRs Total (album:*:seq across all nodes)",
+      "description": "Number of per-album seq counter keys in Redis. Each album with at least one photo upload has one key.",
+      "gridPos": {
+        "x": 15,
+        "y": 13,
+        "w": 4,
+        "h": 5
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum(album_store_seq_incr_total)",
+          "legendFormat": "seq keys"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Redis Memory Used",
+      "gridPos": {
+        "x": 19,
+        "y": 13,
+        "w": 5,
+        "h": 5
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 209715200
+              },
+              {
+                "color": "red",
+                "value": 419430400
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "redis_memory_used_bytes",
+          "legendFormat": "used"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Redis Commands/s (INCR \u00b7 GET \u00b7 SET \u00b7 DEL)",
+      "description": "INCR = seq assignment for photo uploads. GET = cache reads (album + photo status). SET/DEL = cache writes/invalidations.",
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 16,
+        "h": 6
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 2
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "rate(redis_commands_processed_total[1m])",
+          "legendFormat": "Total commands/s"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "rate(redis_keyspace_hits_total[1m]) + rate(redis_keyspace_misses_total[1m])",
+          "legendFormat": "GET ops/s"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "rate(redis_expired_keys_total[1m])",
+          "legendFormat": "Expired keys/s (TTL)"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Redis Connections & Latency",
+      "gridPos": {
+        "x": 16,
+        "y": 18,
+        "w": 8,
+        "h": 6
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Command latency (\u00b5s)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "\u00b5s"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "redis_connected_clients",
+          "legendFormat": "Connected clients"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "redis_latency_percentiles_usec{quantile=\"0.99\"}",
+          "legendFormat": "Command latency (\u00b5s)"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "RDS PostgreSQL",
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "DB Connections (active vs max)",
+      "description": "4 nodes \u00d7 25 conns = 100 total. db.t3.medium max = ~170. Red line at 140 = safe limit.",
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 12,
+        "h": 6
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Max safe (140)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "pg_stat_database_numbackends{datname=\"albumstore\"}",
+          "legendFormat": "Active connections"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "aws_rds_database_connections_average",
+          "legendFormat": "RDS CloudWatch"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "vector(140)",
+          "legendFormat": "Max safe (140)"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "DB Operations/s (INSERT \u00b7 UPDATE \u00b7 SELECT)",
+      "description": "INSERT = photo upload. UPDATE = photo status (processing\u2192completed). SELECT = album/photo GET requests.",
+      "gridPos": {
+        "x": 12,
+        "y": 25,
+        "w": 12,
+        "h": 6
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 2
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "rate(pg_stat_database_tup_inserted{datname=\"albumstore\"}[5m])",
+          "legendFormat": "Inserts/s"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "rate(pg_stat_database_tup_updated{datname=\"albumstore\"}[5m])",
+          "legendFormat": "Updates/s"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "rate(pg_stat_database_tup_fetched{datname=\"albumstore\"}[5m])",
+          "legendFormat": "Fetches/s"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "type": "stat",
+      "title": "DB Size",
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 4,
+        "h": 3
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "pg_database_size_bytes{datname=\"albumstore\"}",
+          "legendFormat": "size"
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "type": "stat",
+      "title": "RDS CPU",
+      "gridPos": {
+        "x": 4,
+        "y": 31,
+        "w": 4,
+        "h": 3
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "aws_rds_cpuutilization_average",
+          "legendFormat": "CPU %"
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "type": "stat",
+      "title": "RDS IOPS",
+      "gridPos": {
+        "x": 8,
+        "y": 31,
+        "w": 4,
+        "h": 3
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "iops"
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "aws_rds_read_iops_average",
+          "legendFormat": "Read IOPS"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "aws_rds_write_iops_average",
+          "legendFormat": "Write IOPS"
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "type": "row",
+      "title": "EC2 Nodes (4\u00d7 c5n.large, 25 Gbps each)",
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "CPU Utilization per Node (%)",
+      "description": "c5n.large has dedicated vCPUs \u2014 no burst throttle. Sustained high CPU is real load, not credit depletion.",
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 12,
+        "h": 7
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "lineWidth": 2
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 60
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "aws_ec2_cpuutilization_average",
+          "legendFormat": "{{tag_Name}}"
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "Network Throughput (In = receiving uploads, Out = S3 + responses)",
+      "description": "NetworkIn = ChaosArena uploading photos to us. NetworkOut = uploading to S3 + HTTP responses.",
+      "gridPos": {
+        "x": 12,
+        "y": 35,
+        "w": 12,
+        "h": 7
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "lineWidth": 2
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "aws_ec2_network_in_sum / 60",
+          "legendFormat": "In ({{tag_Name}})"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "aws_ec2_network_out_sum / 60",
+          "legendFormat": "Out ({{tag_Name}})"
+        }
+      ]
+    },
+    {
+      "id": 50,
+      "type": "row",
+      "title": "Application \u2014 /metrics (per-node, from Go server)",
+      "description": "Scraped from each c5n.large node's /metrics endpoint. Gives per-operation Redis hit/miss breakdown, upload latency, and semaphore slot pressure.",
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "id": 51,
+      "type": "timeseries",
+      "title": "Redis Hit Rate by Operation (%)",
+      "description": "album_get = GET /albums/:id cache. photo_get = GET /photos/:id cache. High rate = healthy cache. Drops after Redis restart or cold start.",
+      "gridPos": {
+        "x": 0,
+        "y": 43,
+        "w": 12,
+        "h": 6
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "lineWidth": 2
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "100 * rate(album_store_cache_hits_total{op=\"album_get\"}[1m]) / (rate(album_store_cache_hits_total{op=\"album_get\"}[1m]) + rate(album_store_cache_misses_total{op=\"album_get\"}[1m]) + 0.001)",
+          "legendFormat": "Album cache hit % ({{instance}})"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "100 * rate(album_store_cache_hits_total{op=\"photo_get\"}[1m]) / (rate(album_store_cache_hits_total{op=\"photo_get\"}[1m]) + rate(album_store_cache_misses_total{op=\"photo_get\"}[1m]) + 0.001)",
+          "legendFormat": "Photo status cache hit % ({{instance}})"
+        }
+      ]
+    },
+    {
+      "id": 52,
+      "type": "timeseries",
+      "title": "Redis Ops/s \u2014 Hits, Misses, Seq INCRs, Deletes",
+      "description": "INCR = one per photo upload. Hits+Misses = cache reads. Deletes = cache invalidations on photo DELETE.",
+      "gridPos": {
+        "x": 12,
+        "y": 43,
+        "w": 12,
+        "h": 6
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 2
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum(rate(album_store_cache_hits_total[1m]))",
+          "legendFormat": "Cache hits/s"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "sum(rate(album_store_cache_misses_total[1m]))",
+          "legendFormat": "Cache misses/s (\u2192 DB)"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "sum(rate(album_store_seq_incr_total[1m]))",
+          "legendFormat": "Seq INCRs/s (photo uploads)"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "sum(rate(album_store_cache_delete_total[1m]))",
+          "legendFormat": "Cache deletes/s"
+        }
+      ]
+    },
+    {
+      "id": 53,
+      "type": "timeseries",
+      "title": "S3 Upload Duration (seconds) \u2014 processPhoto goroutine",
+      "description": "Time from semaphore acquired to S3 upload complete. Separated from accept latency. High p99 = S3 bandwidth saturation or slow EC2 network.",
+      "gridPos": {
+        "x": 0,
+        "y": 49,
+        "w": 12,
+        "h": 6
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 2
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.50, sum(rate(album_store_photo_upload_duration_seconds_bucket[2m])) by (le))",
+          "legendFormat": "P50"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.95, sum(rate(album_store_photo_upload_duration_seconds_bucket[2m])) by (le))",
+          "legendFormat": "P95"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.99, sum(rate(album_store_photo_upload_duration_seconds_bucket[2m])) by (le))",
+          "legendFormat": "P99"
+        }
+      ]
+    },
+    {
+      "id": 54,
+      "type": "timeseries",
+      "title": "Active Goroutine Semaphore Slots",
+      "description": "Small (<10MB): up to 64 per node. Large (\u226510MB): up to 8 per node. Saturation = uploads queuing before S3 write.",
+      "gridPos": {
+        "x": 12,
+        "y": 49,
+        "w": 12,
+        "h": 6
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Large active (max 32 total)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum(album_store_active_small_uploads)",
+          "legendFormat": "Small active (max 256 total)"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "sum(album_store_active_large_uploads)",
+          "legendFormat": "Large active (max 32 total)"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "sum(rate(album_store_photo_upload_errors_total[1m]))",
+          "legendFormat": "Upload errors/s"
+        }
+      ]
+    },
+    {
+      "id": 60,
+      "type": "row",
+      "title": "S3 \u2014 Photo Storage",
+      "gridPos": {
+        "x": 0,
+        "y": 57,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "id": 41,
+      "type": "stat",
+      "title": "Total Objects (photos uploaded)",
+      "gridPos": {
+        "x": 0,
+        "y": 58,
+        "w": 6,
+        "h": 4
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "s3_bucket_objects_total",
+          "legendFormat": "objects"
+        }
+      ],
+      "description": "Total objects in S3 (real-time via S3 API, updates every 60s)."
+    },
+    {
+      "id": 42,
+      "type": "stat",
+      "title": "Total Bucket Size",
+      "gridPos": {
+        "x": 6,
+        "y": 58,
+        "w": 6,
+        "h": 4
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "s3_bucket_size_bytes",
+          "legendFormat": "bytes"
+        }
+      ],
+      "description": "Total storage used in S3 bucket (real-time via S3 API, updates every 60s)."
+    }
+  ]
+}

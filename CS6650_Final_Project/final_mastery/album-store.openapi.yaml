@@ -1,0 +1,296 @@
+openapi: "3.0.3"
+info:
+  title: ChaosArena v1 — Album Store
+  version: "1.0"
+  description: |
+    Official API contract for CS 6650 ChaosArena v1-album-store.
+    Implement every endpoint exactly as specified. Field names, types,
+    and status strings are checked literally.
+
+servers:
+  - url: "http://your-service-url"
+    description: Your deployed service
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: getHealth
+      responses:
+        "200":
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /albums:
+    get:
+      summary: List all albums
+      operationId: listAlbums
+      description: |
+        Returns every album that has ever been created. Must paginate through
+        all storage pages — do not assume results fit in one DB response.
+      responses:
+        "200":
+          description: Array of albums (bare array or wrapped object both accepted)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items:
+                      $ref: "#/components/schemas/Album"
+                  - $ref: "#/components/schemas/AlbumListWrapped"
+
+  /albums/{album_id}:
+    parameters:
+      - name: album_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    put:
+      summary: Create or update an album
+      operationId: putAlbum
+      description: Idempotent — calling twice with the same album_id must not create two records.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlbumRequest"
+      responses:
+        "200":
+          description: Album updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Album"
+        "201":
+          description: Album created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Album"
+
+    get:
+      summary: Get an album by ID
+      operationId: getAlbum
+      responses:
+        "200":
+          description: Album found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Album"
+        "404":
+          description: Album not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /albums/{album_id}/photos:
+    parameters:
+      - name: album_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    post:
+      summary: Upload a photo (async)
+      operationId: uploadPhoto
+      description: |
+        Must return 202 immediately. Processing happens in the background.
+        `seq` must be assigned synchronously in this handler — not by the
+        background worker. Use a distributed atomic counter per album.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [photo]
+              properties:
+                photo:
+                  type: string
+                  format: binary
+                  description: Binary image file, up to 200 MB
+      responses:
+        "202":
+          description: Upload accepted, processing in background
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PhotoAccepted"
+        "400":
+          description: Missing or malformed photo field
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /albums/{album_id}/photos/{photo_id}:
+    parameters:
+      - name: album_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: photo_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      summary: Get photo status
+      operationId: getPhoto
+      description: |
+        Returns status at every lifecycle stage. `seq` must be present at
+        all stages. `url` must be present when status is "completed".
+      responses:
+        "200":
+          description: Photo found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PhotoStatus"
+        "404":
+          description: Photo not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      summary: Delete a photo
+      operationId: deletePhoto
+      description: |
+        Must complete within 5 seconds. Removes both the metadata record and
+        the stored file. Must not return 5xx on any call.
+      responses:
+        "200":
+          description: Deleted
+        "204":
+          description: Deleted (no body)
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: ["ok"]
+          description: Must be exactly the lowercase string "ok"
+      example:
+        status: "ok"
+
+    Album:
+      type: object
+      required: [album_id, title, description, owner]
+      properties:
+        album_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        owner:
+          type: string
+      example:
+        album_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        title: "My Summer Trip"
+        description: "Photos from Cancun"
+        owner: "student@northeastern.edu"
+
+    AlbumRequest:
+      type: object
+      required: [album_id, title, description, owner]
+      properties:
+        album_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        owner:
+          type: string
+
+    AlbumListWrapped:
+      type: object
+      required: [albums]
+      properties:
+        albums:
+          type: array
+          items:
+            $ref: "#/components/schemas/Album"
+
+    PhotoAccepted:
+      type: object
+      required: [photo_id, seq, status]
+      properties:
+        photo_id:
+          type: string
+          format: uuid
+        seq:
+          type: integer
+          minimum: 1
+          description: |
+            Per-album monotone sequence number. Assigned synchronously in the
+            POST handler. First photo in an album is seq=1, second is seq=2, etc.
+            Independent per album — album A and album B each start at 1.
+        status:
+          type: string
+          enum: ["processing"]
+      example:
+        photo_id: "f1e2d3c4-b5a6-7890-abcd-ef1234567890"
+        seq: 4
+        status: "processing"
+
+    PhotoStatus:
+      type: object
+      required: [photo_id, album_id, seq, status]
+      properties:
+        photo_id:
+          type: string
+          format: uuid
+        album_id:
+          type: string
+          format: uuid
+        seq:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum: ["processing", "completed", "failed"]
+        url:
+          type: string
+          format: uri
+          description: Present only when status is "completed". Must return HTTP 200 when fetched.
+      example:
+        photo_id: "f1e2d3c4-b5a6-7890-abcd-ef1234567890"
+        album_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        seq: 4
+        status: "completed"
+        url: "https://my-bucket.s3.amazonaws.com/albums/a1b2/photos/f1e2?..."
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+      example:
+        error: "not found"

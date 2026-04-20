@@ -1,0 +1,190 @@
+# YACE (yet-another-cloudwatch-exporter) configuration
+# Pulls CloudWatch metrics for ALB, EC2, and S3 resources belonging to the album store.
+# Substitute actual resource names/tags after running terraform apply.
+
+apiVersion: v1alpha1
+sts-region: us-west-2
+
+discovery:
+  exportedTagsOnMetrics:
+    AWS/ApplicationELB:
+      - Name
+    AWS/EC2:
+      - Name
+    AWS/S3:
+      - BucketName
+
+  jobs:
+
+    # ── Application Load Balancer ──────────────────────────────────────────
+    - type: AWS/ApplicationELB
+      regions:
+        - us-west-2
+      searchTags:
+        - key: Name
+          value: album-store-alb
+      period: 60
+      length: 120
+      metrics:
+        # Total HTTP requests through the ALB
+        - name: RequestCount
+          statistics: [Sum]
+          nilToZero: true
+
+        # Backend response latency (p50, p95, p99)
+        - name: TargetResponseTime
+          statistics: [p50, p95, p99, Average]
+          nilToZero: true
+
+        # HTTP 2xx responses (successful)
+        - name: HTTPCode_Target_2XX_Count
+          statistics: [Sum]
+          nilToZero: true
+
+        # HTTP 4xx responses (client errors — not counted as load test errors)
+        - name: HTTPCode_Target_4XX_Count
+          statistics: [Sum]
+          nilToZero: true
+
+        # HTTP 5xx responses (server errors — these count against load test score)
+        - name: HTTPCode_Target_5XX_Count
+          statistics: [Sum]
+          nilToZero: true
+
+        # Active connections to the ALB
+        - name: ActiveConnectionCount
+          statistics: [Sum]
+          nilToZero: true
+
+        # New connections per second
+        - name: NewConnectionCount
+          statistics: [Sum]
+          nilToZero: true
+
+        # Healthy hosts behind the ALB
+        - name: HealthyHostCount
+          statistics: [Average, Minimum]
+          nilToZero: true
+
+    # ── EC2 Instances (the 4 API nodes) ───────────────────────────────────
+    - type: AWS/EC2
+      regions:
+        - us-west-2
+      searchTags:
+        - key: Name
+          value: album-store-node-*
+      period: 60
+      length: 120
+      metrics:
+        # CPU utilization per node (critical — c5n.large has dedicated cores)
+        - name: CPUUtilization
+          statistics: [Average, Maximum]
+          nilToZero: true
+
+        # Network bytes in (receiving photo uploads from ChaosArena)
+        - name: NetworkIn
+          statistics: [Sum]
+          nilToZero: true
+
+        # Network bytes out (sending to S3 + client responses)
+        - name: NetworkOut
+          statistics: [Sum]
+          nilToZero: true
+
+        # Network packets (connection count proxy)
+        - name: NetworkPacketsIn
+          statistics: [Sum]
+          nilToZero: true
+
+    # ── S3 (photo file storage) ─────────────────────────────────────────────
+    - type: AWS/S3
+      regions:
+        - us-west-2
+      searchTags:
+        - key: Name
+          value: album-store-photos
+      period: 86400  # S3 metrics are daily
+      length: 172800
+      metrics:
+        # Total bytes stored
+        - name: BucketSizeBytes
+          statistics: [Average]
+          nilToZero: true
+
+        # Number of objects
+        - name: NumberOfObjects
+          statistics: [Average]
+          nilToZero: true
+
+    # ── RDS PostgreSQL ──────────────────────────────────────────────────────
+    - type: AWS/RDS
+      regions:
+        - us-west-2
+      searchTags:
+        - key: Name
+          value: album-store-db
+      period: 60
+      length: 120
+      metrics:
+        # CPU utilization of the DB instance
+        - name: CPUUtilization
+          statistics: [Average, Maximum]
+          nilToZero: true
+
+        # Active database connections
+        - name: DatabaseConnections
+          statistics: [Average, Maximum]
+          nilToZero: true
+
+        # Read/Write IOPS
+        - name: ReadIOPS
+          statistics: [Average]
+          nilToZero: true
+        - name: WriteIOPS
+          statistics: [Average]
+          nilToZero: true
+
+        # Freeable memory (OOM risk indicator)
+        - name: FreeableMemory
+          statistics: [Average, Minimum]
+          nilToZero: true
+
+    # ── ElastiCache Redis ───────────────────────────────────────────────────
+    # CloudWatch supplements the redis_exporter with cluster-level metrics
+    - type: AWS/ElastiCache
+      regions:
+        - us-west-2
+      searchTags:
+        - key: Name
+          value: album-store-redis
+      period: 60
+      length: 120
+      metrics:
+        # Cache hit/miss from CloudWatch side (confirms redis_exporter data)
+        - name: CacheHits
+          statistics: [Sum]
+          nilToZero: true
+        - name: CacheMisses
+          statistics: [Sum]
+          nilToZero: true
+
+        # Commands processed per second
+        - name: CmdGet
+          statistics: [Sum]
+          nilToZero: true
+        - name: CmdSet
+          statistics: [Sum]
+          nilToZero: true
+
+        # Memory and eviction
+        - name: BytesUsedForCache
+          statistics: [Average]
+          nilToZero: true
+        - name: Evictions
+          statistics: [Sum]
+          nilToZero: true
+
+        # Replication lag (should be ~0 for single-node)
+        - name: ReplicationLag
+          statistics: [Average]
+          nilToZero: true

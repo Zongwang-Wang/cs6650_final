@@ -1,0 +1,209 @@
+# Full-stack local development environment
+# Usage: docker compose up -d
+# Kafka-only: docker compose -f docker-compose.kafka.yml up -d
+
+x-kafka-common: &kafka-common
+  image: bitnami/kafka:3.7
+  restart: unless-stopped
+  networks:
+    - app-net
+  environment: &kafka-common-env
+    KAFKA_CFG_PROCESS_ROLES: "broker,controller"
+    KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka-1:9093,2@kafka-2:9093,3@kafka-3:9093"
+    KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT"
+    KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+    KAFKA_CFG_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+    KAFKA_KRAFT_CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+  healthcheck:
+    test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+    interval: 15s
+    timeout: 10s
+    retries: 5
+    start_period: 30s
+
+services:
+  # ── Kafka Brokers (KRaft, 3-node) ────────────────────────────
+  kafka-1:
+    <<: *kafka-common
+    container_name: kafka-1
+    ports:
+      - "9092:9092"
+    environment:
+      <<: *kafka-common-env
+      KAFKA_CFG_NODE_ID: 1
+      KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-1:9092"
+
+  kafka-2:
+    <<: *kafka-common
+    container_name: kafka-2
+    ports:
+      - "9094:9092"
+    environment:
+      <<: *kafka-common-env
+      KAFKA_CFG_NODE_ID: 2
+      KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-2:9092"
+
+  kafka-3:
+    <<: *kafka-common
+    container_name: kafka-3
+    ports:
+      - "9096:9092"
+    environment:
+      <<: *kafka-common-env
+      KAFKA_CFG_NODE_ID: 3
+      KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-3:9092"
+
+  # ── Topic Initialization ─────────────────────────────────────
+  kafka-init:
+    image: bitnami/kafka:3.7
+    container_name: kafka-init
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
+        condition: service_healthy
+    networks:
+      - app-net
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        echo "Creating Kafka topics..."
+        kafka-topics.sh --bootstrap-server kafka-1:9092 --create --if-not-exists --topic metrics-topic --partitions 6 --replication-factor 3
+        kafka-topics.sh --bootstrap-server kafka-1:9092 --create --if-not-exists --topic analytics-output-topic --partitions 3 --replication-factor 3
+        kafka-topics.sh --bootstrap-server kafka-1:9092 --create --if-not-exists --topic infra-events-topic --partitions 1 --replication-factor 3
+        echo "Topics created:"
+        kafka-topics.sh --bootstrap-server kafka-1:9092 --list
+    restart: "no"
+
+  # ── Cart API (Producer) ──────────────────────────────────────
+  cart-api:
+    build:
+      context: ./services/cart-api
+      dockerfile: Dockerfile
+    container_name: cart-api
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      KAFKA_BROKERS: "kafka-1:9092,kafka-2:9092,kafka-3:9092"
+      KAFKA_TOPIC: "metrics-topic"
+      INSTANCE_ID: "cart-api-1"
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    networks:
+      - app-net
+    restart: unless-stopped
+
+  # ── Analytics Service (Consumer) ──────────────────────────────
+  analytics:
+    build:
+      context: ./services/analytics
+      dockerfile: Dockerfile
+    container_name: analytics
+    ports:
+      - "8081:8081"
+    environment:
+      PORT: "8081"
+      KAFKA_BROKERS: "kafka-1:9092,kafka-2:9092,kafka-3:9092"
+      KAFKA_CONSUMER_TOPIC: "metrics-topic"
+      KAFKA_PRODUCER_TOPIC: "analytics-output-topic"
+      CONSUMER_GROUP: "analytics-group"
+      INSTANCE_ID: "analytics-1"
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    networks:
+      - app-net
+    restart: unless-stopped
+
+  # ── Alert Service (Consumer) ─────────────────────────────────
+  alert:
+    build:
+      context: ./services/alert
+      dockerfile: Dockerfile
+    container_name: alert
+    ports:
+      - "8082:8082"
+    environment:
+      PORT: "8082"
+      KAFKA_BROKERS: "kafka-1:9092,kafka-2:9092,kafka-3:9092"
+      KAFKA_TOPIC: "metrics-topic"
+      CONSUMER_GROUP: "alert-group"
+      ALERT_EMAIL: ""
+      INSTANCE_ID: "alert-1"
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    networks:
+      - app-net
+    restart: unless-stopped
+
+  # ── AI DevOps Agent ──────────────────────────────────────────
+  ai-agent:
+    build:
+      context: ./services/ai-agent
+      dockerfile: Dockerfile
+    container_name: ai-agent
+    ports:
+      - "8083:8083"
+    environment:
+      PORT: "8083"
+      KAFKA_BROKERS: "kafka-1:9092,kafka-2:9092,kafka-3:9092"
+      KAFKA_CONSUMER_TOPIC: "analytics-output-topic"
+      KAFKA_PRODUCER_TOPIC: "infra-events-topic"
+      CONSUMER_GROUP: "ai-agent-group"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+      TERRAFORM_DIR: "/terraform"
+      DRY_RUN: "true"
+      COOLDOWN_SECONDS: "60"
+      INSTANCE_ID: "ai-agent-1"
+    volumes:
+      - ./terraform:/terraform
+    depends_on:
+      analytics:
+        condition: service_started
+    networks:
+      - app-net
+    restart: unless-stopped
+
+  # ── Prometheus ───────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - app-net
+    restart: unless-stopped
+
+  # ── Grafana ──────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/system-overview.json
+    volumes:
+      - ./monitoring/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - app-net
+    restart: unless-stopped
+
+networks:
+  app-net:
+    name: app-net
+    driver: bridge
