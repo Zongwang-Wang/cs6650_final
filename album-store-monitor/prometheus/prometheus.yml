@@ -13,10 +13,10 @@ scrape_configs:
   - job_name: album_store
     static_configs:
       - targets:
-          - "54.187.31.18:8080"
-          - "44.250.71.173:8080"
-          - "34.220.96.211:8080"
-          - "44.249.42.156:8080"
+          - "35.91.43.94:8080"
+          - "35.163.237.209:8080"
+          - "44.251.30.60:8080"
+          - "18.236.80.3:8080"
     metrics_path: /metrics
     relabel_configs:
       - source_labels: [__address__]
